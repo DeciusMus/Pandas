@@ -1,0 +1,172 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import yahoo_fin.stock_info as si
+from IPython.display import display, HTML
+from math import sqrt, exp, log, pi
+from scipy.stats import norm
+pd.options.mode.chained_assignment = None
+
+gold = yf.Ticker("GLD")
+
+#gold.info
+
+#gold.options
+
+opt = gold.option_chain('2022-05-06')
+display(HTML("<style>.container { width:100% !important; }</style>"))
+pd.set_option('display.max_rows' , 300)
+
+#opt.calls
+
+c1 = opt.calls
+c = c1[["lastTradeDate","lastPrice","strike","impliedVolatility"]]
+
+#FILTER LAST TRADING DATE ONLY
+
+call_filtered = c[c['lastTradeDate'].dt.strftime('%Y-%m-%d') == '2022-04-29']
+cf1 = call_filtered
+
+
+cf1['date'] = call_filtered['lastTradeDate'].dt.date
+cf1 = cf1[["lastPrice","strike", "date", "impliedVolatility"]]
+
+#ENTER CONTRACT MATURITY DATE
+
+cf1['end_date'] = pd.to_datetime('2022-05-06')
+
+cf101 = pd.DataFrame({'A':cf1.end_date,'B':cf1.date})
+cf101.A = pd.to_datetime(cf101.A)
+cf101.B = pd.to_datetime(cf101.B)
+
+difference = (cf101.A - cf101.B)
+cf1['difference'] = difference
+
+cf1['time_value'] = difference.dt.days/365
+
+#cf1
+
+price = si.get_data("GLD")
+p1 = price.iloc[-1]
+p = p1["close"]
+cf_filtered2 = p
+cf2 = cf_filtered2
+
+#cf2
+
+cf_filtered3 = cf1[["lastPrice","strike","time_value"]]
+cf3 = cf_filtered3
+
+#cf3
+
+cf4 = cf1["lastPrice"]
+cf4 = cf4.reset_index()
+cf4001 = cf4["lastPrice"]
+
+#cf4001
+
+cf5 = cf1["strike"]
+cf5 = cf5.reset_index()
+cf5001 = cf5["strike"]
+
+#cf5001
+
+cf6 = cf1["time_value"]
+cf6 = cf6.reset_index()
+cf6001 = cf6["time_value"]
+
+#cf6001
+
+cf7 = cf1["impliedVolatility"]
+cf7 = cf7.reset_index()
+cf7001 = cf7["impliedVolatility"]
+
+call = pd.DataFrame({'callPrice':cf4001,'strike':cf5001,'time_value':cf6001,'IV':cf7001,'underlyingClose':cf2})
+
+#call
+
+def f01(S,K, sigma, r, t):
+    d1 = 1 / (sigma * sqrt(t)) * ( log(S/K) + (r + sigma**2/2) * t)
+    return d1
+
+def f02(d1, sigma, t):
+    d2 = d1 - (sigma * sqrt(t))
+    return d2
+
+#TYPE ONE YEAR US TRESEAURY BOND YILED (ANNUALISED)
+    
+r = 0.021
+
+call['d1'] = call.apply(lambda x: f01(x['underlyingClose'], x['strike'], x['IV'], r, x['time_value']), axis=1)
+call['d2'] = call.apply(lambda x: f02(x['d1'], x['IV'], x['time_value']), axis=1)
+
+#call
+
+def call_price(sigma, S, K, r, t, d1, d2):
+    C = norm.cdf(d1) * S - norm.cdf(d2) * K * exp(-r * t)
+    return C
+
+r = 0.021
+
+call_price = call.apply(lambda x: call_price(sigma, x['underlyingClose'], x['strike'], r, x['time_value'], x['d1'], x['d2']), axis=1)
+
+#call_price
+
+call_tab = pd.DataFrame({'call_price_from_equation':call_price,'CallPrice':cf4001,'strike':cf5001,'time_value':cf6001,'UnderlyingClosingPrice':cf2})
+
+#call_tab
+
+#  We need a starting guess for the implied volatility.  We chose 0.5 arbitrarily.
+
+vol = 0.5
+r = 0.021
+C0 = call_tab['call_price_from_equation']
+
+epsilon = 1.0  #  Define variable to check stopping conditions
+abstol = 1e-4  #  Stop calculation when abs(epsilon) < this number
+
+i = 0   #  Variable to count number of iterations
+max_iter = 1e3  #  Max number of iterations before aborting
+
+while epsilon > abstol:
+    #  if-statement to avoid getting stuck in an infinite loop.
+    if i > max_iter:
+        break
+
+    i = i + 1
+    orig = vol
+    d1 = f01(S, K, vol, r, t)
+    d2 = f02(d1, vol, t)
+    
+    call_tab['d1'] = call_tab.apply(lambda x: f01(x['UnderlyingClosingPrice'], x['strike'], vol, r, x['time_value']), axis=1)
+    call_tab['d2'] = call_tab.apply(lambda x: f02(x['d1'], vol, x['time_value']), axis=1)
+    
+    def call_price_iteration(vol, S, K, r, t, d1, d2):
+        C = norm.cdf(d1) * S - norm.cdf(d2) * K * exp(-r * t)
+        return C
+
+#call_tab
+
+    call_tab['x1'] = call_tab.apply(lambda x: call_price_iteration(vol, x['UnderlyingClosingPrice'], x['strike'], r, x['time_value'], x['d1'], x['d2']), axis=1)
+    
+    call_tab['function_value'] = call_tab.x1 - call_tab.call_price_from_equation
+    
+function_value = call_tab['function_value']
+
+call_tab['N(d1)'] = call_tab.apply(lambda x: norm.pdf(x['d1']), axis=1)
+    
+call_tab['N(d2)'] = call_tab.apply(lambda x: norm.pdf(x['d2']), axis=1)
+
+call_tab['sqrt_t'] = np.sqrt(call_tab['time_value'])
+
+call_tab['vega'] = call_tab.UnderlyingClosingPrice * call_tab.d1 * call_tab.sqrt_t
+  
+vol = -(call_tab.function_value)/call_tab.vega + vol
+epsilon = abs(function_value)
+
+call_tab['Implied_Vol'] = vol
+
+#print ('Implied volatility = ',  vol)
+#print ('Code required', i, 'iterations.')
+
+call_tab
