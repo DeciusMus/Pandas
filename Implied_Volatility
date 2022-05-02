@@ -93,7 +93,6 @@ def f02(d1, sigma, t):
     d2 = d1 - (sigma * sqrt(t))
     return d2
 
-#TYPE ONE YEAR US TRESEAURY BOND YILED (ANNUALISED)
     
 r = 0.021
 
@@ -108,7 +107,7 @@ def call_price(sigma, S, K, r, t, d1, d2):
 
 r = 0.021
 
-call_price = call.apply(lambda x: call_price(sigma, x['underlyingClose'], x['strike'], r, x['time_value'], x['d1'], x['d2']), axis=1)
+call_price = call.apply(lambda x: call_price(x['IV'], x['underlyingClose'], x['strike'], r, x['time_value'], x['d1'], x['d2']), axis=1)
 
 #call_price
 
@@ -116,8 +115,8 @@ call_tab = pd.DataFrame({'call_price_from_equation':call_price,'CallPrice':cf400
 
 #call_tab
 
-#  We need a starting guess for the implied volatility.  We chose 0.5 arbitrarily.
-
+#  We need a starting guess for the implied volatility.  We chose 0.5
+#  arbitrarily.
 vol = 0.5
 r = 0.021
 C0 = call_tab['call_price_from_equation']
@@ -135,11 +134,17 @@ while epsilon > abstol:
 
     i = i + 1
     orig = vol
-    d1 = f01(S, K, vol, r, t)
-    d2 = f02(d1, vol, t)
     
-    call_tab['d1'] = call_tab.apply(lambda x: f01(x['UnderlyingClosingPrice'], x['strike'], vol, r, x['time_value']), axis=1)
-    call_tab['d2'] = call_tab.apply(lambda x: f02(x['d1'], vol, x['time_value']), axis=1)
+    def f011(S,K, vol, r, t):
+        d1 = 1 / (vol * sqrt(t)) * ( log(S/K) + (r + vol**2/2) * t)
+        return d1
+
+    def f022(d1, vol, t):
+        d2 = d1 - (vol * sqrt(t))
+        return d2
+    
+    call_tab['d1'] = call_tab.apply(lambda x: f011(x['UnderlyingClosingPrice'], x['strike'], vol, r, x['time_value']), axis=1)
+    call_tab['d2'] = call_tab.apply(lambda x: f022(x['d1'], vol, x['time_value']), axis=1)
     
     def call_price_iteration(vol, S, K, r, t, d1, d2):
         C = norm.cdf(d1) * S - norm.cdf(d2) * K * exp(-r * t)
