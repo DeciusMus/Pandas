@@ -13,7 +13,7 @@ gold = yf.Ticker("GLD")
 
 #gold.options
 
-opt = gold.option_chain('2022-05-06')
+opt = gold.option_chain('2022-05-20')
 display(HTML("<style>.container { width:100% !important; }</style>"))
 pd.set_option('display.max_rows' , 300)
 
@@ -24,7 +24,7 @@ c = c1[["lastTradeDate","lastPrice","strike","impliedVolatility"]]
 
 #FILTER LAST TRADING DATE ONLY
 
-call_filtered = c[c['lastTradeDate'].dt.strftime('%Y-%m-%d') == '2022-04-29']
+call_filtered = c[c['lastTradeDate'].dt.strftime('%Y-%m-%d') == '2022-05-06']
 cf1 = call_filtered
 
 
@@ -33,7 +33,7 @@ cf1 = cf1[["lastPrice","strike", "date", "impliedVolatility"]]
 
 #ENTER CONTRACT MATURITY DATE
 
-cf1['end_date'] = pd.to_datetime('2022-05-06')
+cf1['end_date'] = pd.to_datetime('2022-05-20')
 
 cf101 = pd.DataFrame({'A':cf1.end_date,'B':cf1.date})
 cf101.A = pd.to_datetime(cf101.A)
